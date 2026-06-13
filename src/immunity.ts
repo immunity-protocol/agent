@@ -1,5 +1,6 @@
 import { Immunity, BASE_SEPOLIA } from "@immunity-protocol/sdk";
 import type { NetworkConfig } from "@immunity-protocol/sdk";
+import { JsonRpcProvider, Wallet } from "ethers";
 import type { AgentConfig } from "./config.js";
 
 /**
@@ -17,10 +18,11 @@ import type { AgentConfig } from "./config.js";
 export async function startImmunity(cfg: AgentConfig): Promise<Immunity> {
   const network: NetworkConfig =
     cfg.rpcUrl === undefined ? BASE_SEPOLIA : { ...BASE_SEPOLIA, rpcUrl: cfg.rpcUrl };
-  const im = new Immunity({
-    wallet: cfg.walletKey,
-    network,
-  });
+  // The SDK's public config types `wallet` as a `Signer`; it accepts a raw key
+  // at runtime, but we build a provider-connected `Wallet` so it's type-correct
+  // and the signer is bound to the operator's chosen RPC.
+  const wallet = new Wallet(cfg.walletKey, new JsonRpcProvider(network.rpcUrl));
+  const im = new Immunity({ wallet, network });
   await im.start();
   return im;
 }

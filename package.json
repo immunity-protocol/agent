@@ -12,7 +12,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').cpSync('src/roles/threats.sample.json','dist/roles/threats.sample.json')\"",
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "test": "node --test --import tsx test/*.test.ts",

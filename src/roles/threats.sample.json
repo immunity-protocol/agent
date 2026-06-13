@@ -1,0 +1,20 @@
+[
+  {
+    "address": "0x000000000000000000000000000000000000dEaD",
+    "chainId": 84532,
+    "verdict": "MALICIOUS",
+    "confidence": 90,
+    "severity": 80,
+    "reason": "Known drainer contract: sweeps approved ERC-20 balances on interaction.",
+    "family": "drainer"
+  },
+  {
+    "address": "0x00000000000000000000000000000000DeaDBeef",
+    "chainId": 84532,
+    "verdict": "SUSPICIOUS",
+    "confidence": 70,
+    "severity": 55,
+    "reason": "Phishing approval router flagged by community reports.",
+    "family": "phishing"
+  }
+]

@@ -72,13 +72,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
     throw new ConfigError("AGENT_WALLET_KEY must be a 0x-prefixed 32-byte private key");
   }
   const label = optionalEnv("AGENT_LABEL") ?? `${role}-${walletKey.slice(2, 8)}`;
+  const rpcUrl = optionalEnv("BASE_SEPOLIA_RPC_URL");
+  const apiUrl = optionalEnv("IMMUNITY_API_URL");
   return {
     role,
     walletKey,
     label,
     agentId: optionalEnv("AGENT_ID") ?? label,
-    rpcUrl: optionalEnv("BASE_SEPOLIA_RPC_URL"),
-    apiUrl: optionalEnv("IMMUNITY_API_URL"),
+    ...(rpcUrl !== undefined ? { rpcUrl } : {}),
+    ...(apiUrl !== undefined ? { apiUrl } : {}),
     tickMs: intEnv("AGENT_TICK_MS", 30000),
     heartbeatMs: intEnv("AGENT_HEARTBEAT_MS", 15000),
     version: optionalEnv("AGENT_VERSION") ?? "0.1.0",
