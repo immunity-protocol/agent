@@ -73,10 +73,26 @@ export class Agent {
     void this.#loop(ctx);
   }
 
+  #pausedLogged = false;
+
   async #loop(ctx: StrategyContext): Promise<void> {
     while (this.#running) {
       try {
-        await this.#strategy.tick(ctx);
+        // Fleet-wide pause (judge control): skip acting while paused — the
+        // heartbeat keeps running on its own timer, so the agent stays online,
+        // just idle. Resumes acting the moment the flag clears.
+        if (await this.#reporter.controlPaused()) {
+          if (!this.#pausedLogged) {
+            this.#log.info("fleet paused — idling (heartbeat only)");
+            this.#pausedLogged = true;
+          }
+        } else {
+          if (this.#pausedLogged) {
+            this.#log.info("fleet resumed — acting");
+            this.#pausedLogged = false;
+          }
+          await this.#strategy.tick(ctx);
+        }
       } catch (err) {
         this.#log.error("tick threw", { error: String(err) });
       }

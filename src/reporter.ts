@@ -104,6 +104,25 @@ export class Reporter {
     await this.#post("/v1/agents/activity", payload, "activity");
   }
 
+  /**
+   * Poll the fleet control flag. Returns true when an operator has paused the
+   * fleet (judge control in the playground). Fail-open: if the API is unset or
+   * unreachable, the agent is NOT paused (a control outage shouldn't freeze the
+   * network). Best-effort, never throws.
+   */
+  async controlPaused(): Promise<boolean> {
+    if (this.#cfg.apiUrl === undefined) return false;
+    const url = `${this.#cfg.apiUrl.replace(/\/$/, "")}/v1/agents/control`;
+    try {
+      const res = await fetch(url, { headers: { accept: "application/json" } });
+      if (!res.ok) return false;
+      const data = (await res.json()) as { paused?: boolean };
+      return data.paused === true;
+    } catch {
+      return false;
+    }
+  }
+
   async #post(path: string, body: unknown, kind: string): Promise<void> {
     if (this.#cfg.apiUrl === undefined) return; // offline / local-only
     const url = `${this.#cfg.apiUrl.replace(/\/$/, "")}${path}`;
