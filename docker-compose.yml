@@ -1,0 +1,49 @@
+# Launch a small Immunity fleet with a configurable role mix.
+#
+# Build context is the PARENT directory (so the sibling immunity-sdk is in
+# scope while it's an unpublished file: dependency):
+#
+#   docker compose up --build
+#
+# Each service is one role; scale a role with replicas. Every agent needs its
+# OWN funded + (publisher/corroborator) registered Base Sepolia wallet — set the
+# keys in a .env file next to this compose (AGENT_WALLET_KEY_PUBLISHER, etc.) or
+# inline. The demo's mass-funding of throwaway wallets is a separate fleet-run
+# concern handled outside this template (see README).
+
+x-agent: &agent
+  build:
+    context: ..
+    dockerfile: immunity-agent/Dockerfile
+  image: ghcr.io/immunity-protocol/agent:latest
+  restart: unless-stopped
+  environment: &agent-env
+    BASE_SEPOLIA_RPC_URL: ${BASE_SEPOLIA_RPC_URL:-}
+    IMMUNITY_API_URL: ${IMMUNITY_API_URL:-}
+    AGENT_TICK_MS: ${AGENT_TICK_MS:-30000}
+    AGENT_HEARTBEAT_MS: ${AGENT_HEARTBEAT_MS:-15000}
+
+services:
+  publisher:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      AGENT_ROLE: publisher
+      AGENT_LABEL: publisher-01
+      AGENT_WALLET_KEY: ${AGENT_WALLET_KEY_PUBLISHER:?set AGENT_WALLET_KEY_PUBLISHER}
+
+  hunter:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      AGENT_ROLE: hunter
+      AGENT_LABEL: hunter-01
+      AGENT_WALLET_KEY: ${AGENT_WALLET_KEY_HUNTER:?set AGENT_WALLET_KEY_HUNTER}
+
+  corroborator:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      AGENT_ROLE: corroborator
+      AGENT_LABEL: corroborator-01
+      AGENT_WALLET_KEY: ${AGENT_WALLET_KEY_CORROBORATOR:?set AGENT_WALLET_KEY_CORROBORATOR}
