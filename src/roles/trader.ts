@@ -1,43 +1,39 @@
 import type { CheckContext, ProposedTx } from "@immunity-protocol/sdk";
 import type { Strategy, StrategyContext } from "../strategy.js";
 import { selfCheck } from "./self-check.js";
-import { type CheckInput, type CorpusCase, loadCorpus, pick, toCheckInput } from "../data/corpus.js";
+import { pickFeedItem, toCheckContext } from "../data/feed.js";
 
 /**
  * trader — a treasury agent going about its day. Each (randomly-paced) tick it
  * does ONE of three things, weighted, so the fleet reads as organic activity and
  * not a synchronized attack:
  *
- *   - TRADE  (default ~50%): a normal on-chain action (transfer/clean or to a
- *     flagged drainer) via the shared selfCheck — produces check/block/value
- *     telemetry.
- *   - FEED   (~30%): scrolls the social feed and consumes one post (good OR bad).
- *     A poisoned post (wolf-planted) trips the SemanticMatcher → block; a novel
- *     one escalates to the CRE verifier and, if confirmed, mints an antibody.
- *   - CORPUS (~20%): "consumes" a curated realistic attack from the threat corpus
- *     (data/threats/*) — a matured antibody fires a Tier-1 cache block.
+ *   - TRADE  (~40%): a normal on-chain action (transfer/clean or to a flagged
+ *     drainer) via the shared selfCheck — produces check/block/value telemetry.
+ *   - SOCIAL (~30%): scrolls the fake social feed and consumes one post (good OR
+ *     bad). A wolf-planted post trips the SemanticMatcher → block.
+ *   - INTEL  (~30%): reads one post from the curated threat-intel feed
+ *     (data/feed.json) and check()s it — mostly benign, occasionally a real marker.
  *
- * Weights are tunable: AGENT_TRADER_TRADE / _FEED / _CORPUS (need not sum to 1;
- * they're normalized). Requires a registered + funded wallet to mint/settle.
+ * Weights are tunable: AGENT_TRADER_TRADE / _SOCIAL / _INTEL (normalized).
+ * Requires a registered + funded wallet to mint/settle.
  */
 export class TraderStrategy implements Strategy {
   readonly role = "trader";
   #ready = false;
   #feedUrl = "http://127.0.0.1:8080";
-  #corpus: CorpusCase[] = [];
   readonly #seen = new Set<number>();
 
   async prepare(ctx: StrategyContext): Promise<void> {
     const feed = process.env.AGENT_FEED_URL?.trim();
     if (feed) this.#feedUrl = feed.replace(/\/$/, "");
-    this.#corpus = loadCorpus().filter((c) => toCheckInput(c) !== null);
 
     if (!(await ctx.im.isRegistered())) {
       ctx.log.warn("trader wallet is NOT registered — cannot mint confirmed threats (check-only).");
     }
     const balance = await ctx.im.balanceOf().catch(() => 0n);
     this.#ready = true;
-    ctx.log.info("trader ready", { feed: this.#feedUrl, corpus: this.#corpus.length, balance: balance.toString() });
+    ctx.log.info("trader ready", { social: this.#feedUrl, balance: balance.toString() });
   }
 
   async tick(ctx: StrategyContext): Promise<void> {
@@ -47,39 +43,37 @@ export class TraderStrategy implements Strategy {
       await selfCheck(ctx);
       return;
     }
-    if (mode === "corpus") {
-      await this.#consumeCorpus(ctx);
+    if (mode === "intel") {
+      await this.#consumeIntel(ctx);
       return;
     }
     await this.#consumeFeed(ctx);
   }
 
-  #pickMode(): "trade" | "feed" | "corpus" {
+  #pickMode(): "trade" | "social" | "intel" {
     const w = {
-      trade: num(process.env.AGENT_TRADER_TRADE, 0.5),
-      feed: num(process.env.AGENT_TRADER_FEED, 0.3),
-      corpus: num(process.env.AGENT_TRADER_CORPUS, 0.2),
+      trade: num(process.env.AGENT_TRADER_TRADE, 0.4),
+      social: num(process.env.AGENT_TRADER_SOCIAL, 0.3),
+      intel: num(process.env.AGENT_TRADER_INTEL, 0.3),
     };
-    const total = w.trade + w.feed + w.corpus || 1;
+    const total = w.trade + w.social + w.intel || 1;
     let r = Math.random() * total;
     if ((r -= w.trade) < 0) return "trade";
-    if ((r -= w.feed) < 0) return "feed";
-    return "corpus";
+    if ((r -= w.social) < 0) return "social";
+    return "intel";
   }
 
-  /** Consume a curated realistic attack from the threat corpus. */
-  async #consumeCorpus(ctx: StrategyContext): Promise<void> {
-    if (this.#corpus.length === 0) return void (await selfCheck(ctx));
-    const input = toCheckInput(pick(this.#corpus));
-    if (input === null) return;
-    await this.#runCheck(ctx, input.tx, input.context, {
-      summaryAllow: `Vetted a counterparty action (${input.label}) — clean`,
-      summaryBlock: `Caught a known threat from the corpus — ${input.label}`,
-      label: input.label,
+  /** Read one post from the curated threat-intel feed (feed.json) and check it. */
+  async #consumeIntel(ctx: StrategyContext): Promise<void> {
+    const item = pickFeedItem();
+    await this.#runCheck(ctx, null, toCheckContext(item), {
+      summaryAllow: `Read ${item.source} intel — nothing actionable`,
+      summaryBlock: `Flagged a threat while reading ${item.source} intel`,
+      label: `intel ${item.id}`,
     });
   }
 
-  /** Scroll the feed and consume one post — good or bad, unbiased. */
+  /** Scroll the fake social feed and consume one post — good or bad, unbiased. */
   async #consumeFeed(ctx: StrategyContext): Promise<void> {
     const post = await this.#randomPost(ctx);
     if (post === undefined) return void (await selfCheck(ctx));
@@ -154,6 +148,10 @@ export class TraderStrategy implements Strategy {
       return undefined;
     }
   }
+}
+
+function pick<T>(a: T[]): T {
+  return a[Math.floor(Math.random() * a.length)] as T;
 }
 
 function num(v: string | undefined, fallback: number): number {

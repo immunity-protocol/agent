@@ -1,35 +1,22 @@
 import type { Strategy, StrategyContext } from "../strategy.js";
-import { type CorpusCase, loadCorpus, pick, toPublishInput } from "../data/corpus.js";
+import { type FeedItem, pickFeedItem, toPublishInput } from "../data/feed.js";
 import { selfCheck } from "./self-check.js";
 
 /**
- * publisher — classify curated threats and `publish()` them as antibodies,
- * staking the bond. The feed is the full multi-type corpus in `data/threats/*`
- * (address, call-pattern, bytecode, graph, semantic) — NOT address-only — so the
- * network seeds with every antibody type. Each case is published at most once
- * per process; duplicates a peer already published surface as AntibodyExists and
- * are picked up by corroborators (→ maturation). When the corpus is exhausted
- * the tick falls back to a self-`check()` so the agent stays visibly online.
+ * publisher — reads the curated threat-intel feed (data/feed.json) and, when a
+ * post carries something concrete (a full address or a quoted injection marker),
+ * stakes an antibody for it. Benign / noise / false-positive-bait posts yield
+ * nothing — the publisher just does a self-check that tick. So each tick the
+ * publisher either publishes from the feed or does nothing of consequence.
  *
- * Requires a registered + deposited wallet — `prepare()` verifies both.
+ * Duplicates a peer already published surface as AntibodyExists and are picked
+ * up by corroborators (→ maturation). Requires a registered + deposited wallet.
  */
 export class PublisherStrategy implements Strategy {
   readonly role = "publisher";
-  #corpus: CorpusCase[] = [];
   #ready = false;
-  // Per-tick odds of publishing a corpus threat (vs a self-check). Tunable.
-  #publishRate = Number(process.env.AGENT_PUBLISHER_RATE ?? "0.8");
 
   async prepare(ctx: StrategyContext): Promise<void> {
-    this.#corpus = loadCorpus();
-    ctx.log.info("loaded threat corpus", {
-      count: this.#corpus.length,
-      byType: this.#corpus.reduce<Record<string, number>>((a, c) => {
-        a[c.seed.abType] = (a[c.seed.abType] ?? 0) + 1;
-        return a;
-      }, {}),
-    });
-
     if (!(await ctx.im.isRegistered())) {
       ctx.log.warn("wallet is NOT a registered publisher — publishing disabled (see README).");
       return;
@@ -46,58 +33,52 @@ export class PublisherStrategy implements Strategy {
   }
 
   async tick(ctx: StrategyContext): Promise<void> {
-    // Every tick the publisher does something: mostly publish a random corpus
-    // threat (re-attempts on already-published targets surface as AntibodyExists
-    // and feed corroboration), otherwise a self-check for steady telemetry.
-    const rate = Number.isFinite(this.#publishRate) ? this.#publishRate : 0.8;
-    if (!this.#ready || this.#corpus.length === 0 || Math.random() >= rate) {
+    if (!this.#ready) {
       await selfCheck(ctx);
       return;
     }
-    const candidate = pick(this.#corpus);
+    const item = pickFeedItem();
+    const input = toPublishInput(item);
+    if (input === null) {
+      // Benign / noise post — nothing to stake. Keep telemetry alive.
+      await selfCheck(ctx);
+      return;
+    }
 
-    const label = describeSeed(candidate);
+    const label = describe(item, input.seed.abType);
     try {
-      const result = await ctx.im.publish(toPublishInput(candidate));
+      const result = await ctx.im.publish(input);
       ctx.log.info("published antibody", { immId: result.immId, seed: label });
       ctx.record({
         actionType: "publish",
-        actionSummary: `Published ${candidate.verdict} ${candidate.seed.abType} antibody — ${label}`,
+        actionSummary: `Published ${input.verdict} ${input.seed.abType} antibody from ${item.source} intel — ${label}`,
         status: "info",
         antibodyImmId: result.immId,
         txHash: result.txHash,
-        family: candidate.family ?? null,
+        family: item.ground_truth_hint,
       });
     } catch (err) {
       const msg = String(err);
-      // AntibodyExists from a peer is expected (→ corroboration), log quietly.
-      const dup = /AntibodyExists|already/i.test(msg);
+      // AntibodyExists (selector 0x7d8c8a75) from a peer is expected → corroboration.
+      const dup = /AntibodyExists|already|0x7d8c8a75/i.test(msg);
       ctx.log[dup ? "debug" : "error"]("publish outcome", { seed: label, error: msg });
       if (!dup) {
         ctx.record({
           actionType: "publish",
           actionSummary: `Publish failed — ${label}: ${msg.slice(0, 120)}`,
           status: "error",
-          family: candidate.family ?? null,
+          family: item.ground_truth_hint,
         });
       }
     }
   }
 }
 
-/** Short human label for a seed, by type. */
-function describeSeed(c: CorpusCase): string {
-  const s = c.seed;
-  switch (s.abType) {
-    case "ADDRESS":
-      return s.target;
-    case "CALL_PATTERN":
-      return `${s.selector} @ ${s.target.slice(0, 10)}…`;
-    case "BYTECODE":
-      return `bytecode ${s.bytecodeHash.slice(0, 12)}…`;
-    case "GRAPH":
-      return `taint-set ${s.taintSetId.slice(0, 12)}…`;
-    case "SEMANTIC":
-      return `${s.flavor}: "${s.pattern.value.slice(0, 32)}"`;
+function describe(item: FeedItem, abType: string): string {
+  if (abType === "ADDRESS") {
+    const m = item.content.match(/0x[0-9a-fA-F]{40}/);
+    return m ? m[0] : item.id;
   }
+  const q = item.content.match(/'([^']{6,140})'/)?.[1];
+  return q ? `"${q.slice(0, 40)}"` : item.id;
 }
