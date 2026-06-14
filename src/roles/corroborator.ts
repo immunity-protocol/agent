@@ -1,4 +1,4 @@
-import type { CheckContext, ProposedTx, PublishInput } from "@immunity-protocol/sdk";
+import type { AntibodySeed, CheckContext, ProposedTx, PublishInput } from "@immunity-protocol/sdk";
 import type { Strategy, StrategyContext } from "../strategy.js";
 import { type ThreatCandidate, loadThreats } from "./threats.js";
 import { selfCheck } from "./self-check.js";
@@ -48,16 +48,17 @@ export class CorroboratorStrategy implements Strategy {
     ctx.log.info("corroborator ready", { feed: this.#threats.length, balance: balance.toString() });
   }
 
-  readonly #seenSemantic = new Set<string>();
+  readonly #seenPeer = new Set<string>();
 
   async tick(ctx: StrategyContext): Promise<void> {
     if (!this.#ready) {
       await selfCheck(ctx);
       return;
     }
-    // Prefer corroborating a peer's SEMANTIC threat (the maturation engine for
-    // injection antibodies). Falls through to the ADDRESS feed when there's none.
-    if (await this.#corroborateSemantic(ctx)) return;
+    // Prefer corroborating a peer's threat of ANY type (the maturation engine:
+    // distinct publishers strengthen a matcher toward ACTIVE). Falls through to
+    // the local ADDRESS feed when there's no fresh peer antibody to corroborate.
+    if (await this.#corroboratePeer(ctx)) return;
     if (this.#threats.length === 0) {
       await selfCheck(ctx);
       return;
@@ -138,82 +139,106 @@ export class CorroboratorStrategy implements Strategy {
   }
 
   /**
-   * Corroborate a peer's SEMANTIC threat — the maturation engine for injection
-   * antibodies. Pulls a recent probation SEMANTIC antibody published by another
-   * agent and corroborates the SAME matcher by its exact marker, adding a
+   * Corroborate a peer's threat of ANY type — the maturation engine. Pulls a
+   * recent probation antibody published by another agent, reconstructs the SAME
+   * matcher seed from its public matcher summary, and corroborates it, adding a
    * distinct publisher to the corroboration set so the antibody matures.
    *
-   * The original mint is already CRE-attested (the trader's Tier-3 verdict), so
-   * corroboration here is a distinct staking publisher confirming it — it does
-   * NOT re-run the CRE per corroboration (that would serialize the whole fleet
-   * behind one verifier and re-infer an identical input).
+   * The original mint is already attested (a publisher's classification or the
+   * trader's CRE Tier-3 verdict), so corroboration here is a distinct staking
+   * publisher confirming it — it does NOT re-run the CRE per corroboration (that
+   * would serialize the whole fleet behind one verifier and re-infer an identical
+   * input). Works identically for ADDRESS / CALL_PATTERN / SEMANTIC.
    *
-   * Returns true when it acted (so the caller skips the ADDRESS path this tick).
+   * Returns true when it acted (so the caller skips the ADDRESS feed this tick).
    */
-  async #corroborateSemantic(ctx: StrategyContext): Promise<boolean> {
+  async #corroboratePeer(ctx: StrategyContext): Promise<boolean> {
     if (ctx.cfg.apiUrl === undefined) return false;
-    const row = await this.#pickSemantic(ctx);
+    const row = await this.#pickPeer(ctx);
     if (row === undefined) return false;
-    this.#seenSemantic.add(row.keccak_id);
+    this.#seenPeer.add(row.keccak_id);
 
-    const marker = row.primary_matcher?.markerHint;
-    const flavor = this.#flavorOf(row);
-    if (marker === undefined || marker === "" || flavor === undefined) return false;
+    const seed = this.#seedFromRow(row);
+    if (seed === undefined) return false;
 
     const input: PublishInput = {
-      seed: { abType: "SEMANTIC", flavor, pattern: { kind: "marker", value: marker } },
+      seed,
       verdict: "MALICIOUS",
       confidence: row.confidence ?? 90,
       severity: row.severity ?? 80,
-      reasonSummary: `Corroborated ${row.imm_id}: a distinct publisher confirming this injection marker`,
+      reasonSummary: `Corroborated ${row.imm_id}: a distinct publisher confirming this ${row.type} threat`,
     };
     try {
       const result = await ctx.im.corroborate(input);
-      ctx.log.info("corroborated SEMANTIC antibody", { immId: result.immId, peer: row.imm_id });
+      ctx.log.info("corroborated peer antibody", { immId: result.immId, peer: row.imm_id, type: row.type });
       ctx.record({
         actionType: "corroborate",
-        actionSummary: `Corroborated SEMANTIC threat ${row.imm_id} — a distinct publisher strengthened the matcher`,
+        actionSummary: `Corroborated ${row.type.toUpperCase()} threat ${row.imm_id} — a distinct publisher strengthened the matcher`,
         status: "info",
         antibodyImmId: result.immId,
         txHash: result.txHash,
-        family: "semantic",
+        family: row.type,
       });
       // Permissionless poke: once the matcher has K corroborating publishers it's
       // mature — promote the peer PROBATION→ACTIVE so it hard-blocks. Reverts
       // NotYet() (caught) if it isn't mature yet.
       try {
         await ctx.im.mature(row.keccak_id);
-        ctx.log.info("matured SEMANTIC antibody", { peer: row.imm_id });
+        ctx.log.info("matured peer antibody", { peer: row.imm_id, type: row.type });
       } catch {
         /* not yet mature (corroboration < K) — a later corroboration will trip it */
       }
     } catch (err) {
-      ctx.log.error("semantic corroborate failed", { peer: row.imm_id, error: String(err) });
+      ctx.log.error("peer corroborate failed", { peer: row.imm_id, error: String(err) });
     }
     return true;
   }
 
-  /** Map a feed row's flavor string to the SDK SemanticFlavor enum. */
-  #flavorOf(row: SemanticRow): "COUNTERPARTY" | "MANIPULATION" | "PROMPT_INJECTION" | undefined {
-    const f = (row.flavor ?? row.primary_matcher?.flavor ?? "").toUpperCase();
-    if (f === "COUNTERPARTY" || f === "MANIPULATION" || f === "PROMPT_INJECTION") return f;
-    return undefined;
+  /** Reconstruct an AntibodySeed from a peer antibody's public matcher summary. */
+  #seedFromRow(row: PeerRow): AntibodySeed | undefined {
+    const m = row.primary_matcher;
+    if (m === null || m === undefined) return undefined;
+    switch (m.kind) {
+      case "address":
+        if (!m.target || m.chainId === undefined) return undefined;
+        return { abType: "ADDRESS", chainId: m.chainId, target: m.target as `0x${string}` };
+      case "call_pattern":
+        if (!m.target || m.chainId === undefined || !m.selector || !m.argsTemplate) return undefined;
+        return {
+          abType: "CALL_PATTERN",
+          chainId: m.chainId,
+          target: m.target as `0x${string}`,
+          selector: m.selector as `0x${string}`,
+          argsTemplate: m.argsTemplate as `0x${string}`,
+        };
+      case "semantic": {
+        const flavor = (m.flavor ?? row.flavor ?? "").toUpperCase();
+        if (!m.markerHint) return undefined;
+        if (flavor !== "COUNTERPARTY" && flavor !== "MANIPULATION" && flavor !== "PROMPT_INJECTION") {
+          return undefined;
+        }
+        return { abType: "SEMANTIC", flavor, pattern: { kind: "marker", value: m.markerHint } };
+      }
+      // BYTECODE / GRAPH need off-chain matcher enrichment not in the summary; skip.
+      default:
+        return undefined;
+    }
   }
 
-  /** A recent probation SEMANTIC antibody this corroborator didn't publish + hasn't seen. */
-  async #pickSemantic(ctx: StrategyContext): Promise<SemanticRow | undefined> {
+  /** A recent probation antibody (any type) this corroborator didn't publish + hasn't seen. */
+  async #pickPeer(ctx: StrategyContext): Promise<PeerRow | undefined> {
     const base = ctx.cfg.apiUrl?.replace(/\/$/, "");
     try {
-      const res = await fetch(`${base}/v1/antibodies?type=semantic&status=probation&limit=20`);
+      const res = await fetch(`${base}/v1/antibodies?status=probation&limit=30`);
       if (!res.ok) return undefined;
-      const body = (await res.json()) as { items?: SemanticRow[] };
+      const body = (await res.json()) as { items?: PeerRow[] };
       const items = Array.isArray(body.items) ? body.items : [];
       const own = ctx.wallet.toLowerCase();
       return items.find(
         (r) =>
-          !this.#seenSemantic.has(r.keccak_id) &&
+          !this.#seenPeer.has(r.keccak_id) &&
           (r.publisher ?? "").toLowerCase() !== own &&
-          (r.primary_matcher?.markerHint ?? "") !== "",
+          this.#seedFromRow(r) !== undefined,
       );
     } catch {
       return undefined;
@@ -221,12 +246,21 @@ export class CorroboratorStrategy implements Strategy {
   }
 }
 
-interface SemanticRow {
+interface PeerRow {
   keccak_id: string;
   imm_id: string;
+  type: string;
   flavor?: string | null;
   confidence?: number;
   severity?: number;
   publisher?: string;
-  primary_matcher?: { markerHint?: string; flavor?: string } | null;
+  primary_matcher?: {
+    kind?: string;
+    target?: string;
+    chainId?: number;
+    selector?: string;
+    argsTemplate?: string;
+    markerHint?: string;
+    flavor?: string;
+  } | null;
 }
