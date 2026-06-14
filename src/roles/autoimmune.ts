@@ -34,12 +34,15 @@ interface GoodTarget {
  * legitimate, high-traffic-looking addresses that are NOT yet protected — the
  * frontier the challenge game has to defend on its own.
  */
+// Interleaved protected / unprotected so a run shows BOTH the blue-chip DoS
+// (×1000 bond — bankrupts the attacker fast) and the not-yet-protected frontier
+// attack the challenge game has to defend on its own.
 const GOOD_TARGETS: readonly GoodTarget[] = [
   { address: BASE_SEPOLIA.addresses.usdc as `0x${string}`, label: "USDC", protected: true },
-  { address: "0x4200000000000000000000000000000000000006", label: "WETH", protected: true },
-  { address: "0x2626664c2603336E57B271c5C0b26F421741e481", label: "Uniswap v4 router", protected: true },
   { address: "0x6ff5693b99212da76ad316178a184ab56d299b43", label: "Uniswap v4 PoolManager", protected: false },
+  { address: "0x4200000000000000000000000000000000000006", label: "WETH", protected: true },
   { address: "0x827922686190790b37229fd06084350e74485b72", label: "Aave v3 Pool", protected: false },
+  { address: "0x2626664c2603336E57B271c5C0b26F421741e481", label: "Uniswap v4 router", protected: true },
   { address: "0xcf77a3ba9a5ca399b7c97c74d54e5b1beb874e43", label: "Aerodrome router", protected: false },
 ];
 
@@ -66,10 +69,14 @@ export class AutoimmuneStrategy implements Strategy {
   #cursor = 0;
   #ready = false;
   #bankrupt = false;
-  /** Reserve floor: below this it can't afford even a base bond — declare bankrupt. */
-  #floor = 1_000_000n; // 1 USDC (the bondFloor); protected targets cost ~10×.
+  /**
+   * Bankruptcy floor: below this it can no longer afford a blue-chip (protected)
+   * flag — the ×1000-bond headline attack — so it's done. ≈ computeBond(100,
+   * protected) = bondBase·2·protectedMultiplier ≈ 2000 USDC on the live params.
+   */
+  #floor = 2_000_000_000n; // 2,000 USDC
   /** Refund top-up minted + deposited when the playground bumps the signal. */
-  #refundAmount = 60_000_000n; // 60 MockUSDC
+  #refundAmount = 6_000_000_000n; // 6,000 MockUSDC — ~3 blue-chip attacks
   /** Last refund nonce seen; a bump triggers a self-refund. -1 = not yet baselined. */
   #lastRefundNonce = -1;
 

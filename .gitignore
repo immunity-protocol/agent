@@ -8,3 +8,4 @@ dist/
 fleet/.mnemonic
 fleet/fleet.json
 .fleet.env
+.idea/
