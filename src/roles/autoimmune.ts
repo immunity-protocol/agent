@@ -1,3 +1,4 @@
+import { Contract, JsonRpcProvider, Wallet } from "ethers";
 import { BASE_SEPOLIA, type AntibodySeed, type PublishInput } from "@immunity-protocol/sdk";
 import type { Strategy, StrategyContext } from "../strategy.js";
 
@@ -67,15 +68,23 @@ export class AutoimmuneStrategy implements Strategy {
   #bankrupt = false;
   /** Reserve floor: below this it can't afford even a base bond — declare bankrupt. */
   #floor = 1_000_000n; // 1 USDC (the bondFloor); protected targets cost ~10×.
+  /** Refund top-up minted + deposited when the playground bumps the signal. */
+  #refundAmount = 60_000_000n; // 60 MockUSDC
+  /** Last refund nonce seen; a bump triggers a self-refund. -1 = not yet baselined. */
+  #lastRefundNonce = -1;
 
   async prepare(ctx: StrategyContext): Promise<void> {
     const floor = process.env.AGENT_AUTOIMMUNE_FLOOR;
     if (floor !== undefined && /^\d+$/.test(floor)) this.#floor = BigInt(floor);
+    const refund = process.env.AGENT_AUTOIMMUNE_REFUND;
+    if (refund !== undefined && /^\d+$/.test(refund)) this.#refundAmount = BigInt(refund);
 
     if (!(await ctx.im.isRegistered())) {
       ctx.log.warn("autoimmune wallet is NOT registered — cannot publish flags. Bootstrap it first.");
       return;
     }
+    // Baseline the refund signal so a stale nonce doesn't fire an instant refund.
+    this.#lastRefundNonce = await this.#fetchRefundNonce(ctx);
     this.#ready = true;
     const balance = await ctx.im.balanceOf();
     ctx.reportStatus?.({ budget: balance, bankrupt: balance < this.#floor });
@@ -84,6 +93,9 @@ export class AutoimmuneStrategy implements Strategy {
 
   async tick(ctx: StrategyContext): Promise<void> {
     if (!this.#ready) return;
+
+    // Operator refund (judge control): a bumped nonce tops the budget back up.
+    await this.#maybeRefund(ctx);
 
     const balance = await ctx.im.balanceOf();
     if (balance < this.#floor) {
@@ -143,6 +155,50 @@ export class AutoimmuneStrategy implements Strategy {
         status: "error",
         target: target.address,
       });
+    }
+  }
+
+  /** The current refund nonce from the app's control endpoint (0 on any failure). */
+  async #fetchRefundNonce(ctx: StrategyContext): Promise<number> {
+    if (ctx.cfg.apiUrl === undefined) return 0;
+    try {
+      const res = await fetch(`${ctx.cfg.apiUrl.replace(/\/$/, "")}/v1/agents/control`, {
+        headers: { accept: "application/json" },
+      });
+      if (!res.ok) return this.#lastRefundNonce < 0 ? 0 : this.#lastRefundNonce;
+      const data = (await res.json()) as { refund_nonce?: number };
+      return typeof data.refund_nonce === "number" ? data.refund_nonce : 0;
+    } catch {
+      return this.#lastRefundNonce < 0 ? 0 : this.#lastRefundNonce;
+    }
+  }
+
+  /** On a bumped refund nonce, self-mint MockUSDC + re-deposit the bond budget. */
+  async #maybeRefund(ctx: StrategyContext): Promise<void> {
+    const nonce = await this.#fetchRefundNonce(ctx);
+    if (nonce <= this.#lastRefundNonce) return;
+    this.#lastRefundNonce = nonce;
+    try {
+      const rpc = ctx.cfg.rpcUrl ?? BASE_SEPOLIA.rpcUrl;
+      const wallet = new Wallet(ctx.cfg.walletKey, new JsonRpcProvider(rpc, 84532));
+      const usdc = new Contract(
+        BASE_SEPOLIA.addresses.usdc,
+        ["function mint(address,uint256)"],
+        wallet,
+      );
+      const mint = usdc.getFunction("mint");
+      await (await mint(wallet.address, this.#refundAmount)).wait();
+      await ctx.im.deposit(this.#refundAmount); // handles allowance internally
+      const balance = await ctx.im.balanceOf();
+      ctx.reportStatus?.({ budget: balance, bankrupt: false });
+      ctx.log.info("autoimmune refunded by operator", { budget: balance.toString() });
+      ctx.record({
+        actionType: "refund",
+        actionSummary: `Operator refund: budget topped up to $${(Number(balance) / 1e6).toFixed(2)} — attack resumes`,
+        status: "info",
+      });
+    } catch (err) {
+      ctx.log.error("self-refund failed", { error: String(err) });
     }
   }
 }
