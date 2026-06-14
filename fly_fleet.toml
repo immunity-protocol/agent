@@ -1,0 +1,25 @@
+app = 'immunity-fleet'
+primary_region = 'yyz'
+
+[build]
+  dockerfile = 'Dockerfile.fleet'
+
+[env]
+  FLEET_MIX = 'publisher:8,hunter:6,corroborator:6,autoimmune:2,trader:40,wolf:4'
+  FLEET_LABEL_OFFSET = '0'
+  IMMUNITY_API_URL = 'https://immunity-api.fly.dev'
+  AGENT_FEED_URL = 'https://immunity-app.fly.dev'
+  # Each agent sleeps a random span in [MIN,MAX] between ticks — organic, not a
+  # synchronized burst. Lower these (e.g. 60000/180000) to make the fleet faster.
+  AGENT_TICK_MIN_MS = '180000'
+  AGENT_TICK_MAX_MS = '720000'
+  FLEET_STAGGER_MS = '1500'
+
+# Worker app — no public services. One always-on machine runs the supervisor.
+# 62 node processes (8+6+6+2+40) — sized for headroom at ~55MB/proc.
+[[vm]]
+  size = 'shared-cpu-4x'
+  memory = '8192'
+
+[deploy]
+  strategy = 'immediate'

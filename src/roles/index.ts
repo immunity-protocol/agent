@@ -5,6 +5,7 @@ import { CorroboratorStrategy } from "./corroborator.js";
 import { HunterStrategy } from "./hunter.js";
 import { PublisherStrategy } from "./publisher.js";
 import { TraderStrategy } from "./trader.js";
+import { WolfStrategy } from "./wolf.js";
 
 /**
  * Select the role strategy for this process. The role is the only thing that
@@ -23,5 +24,7 @@ export function selectStrategy(role: Role): Strategy {
       return new AutoimmuneStrategy();
     case "trader":
       return new TraderStrategy();
+    case "wolf":
+      return new WolfStrategy();
   }
 }
