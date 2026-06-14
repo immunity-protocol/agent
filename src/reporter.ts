@@ -40,6 +40,8 @@ export interface HeartbeatPayload {
   budget?: string | null;
   /** Whether the agent has exhausted its budget (autoimmune only). */
   bankrupt?: boolean;
+  /** Whether the agent is currently idled by the fleet-pause control. */
+  paused?: boolean;
 }
 
 /**
@@ -70,6 +72,7 @@ export class Reporter {
   #ens: string | null = null;
   #budget: bigint | null = null;
   #bankrupt = false;
+  #paused = false;
 
   constructor(cfg: AgentConfig, log: Logger) {
     this.#cfg = cfg;
@@ -83,6 +86,11 @@ export class Reporter {
   }
 
   /** Update the budget/bankrupt status carried on the next heartbeat (autoimmune). */
+  /** Mirror the fleet-pause state onto the heartbeat so the UI can show it. */
+  setPaused(paused: boolean): void {
+    this.#paused = paused;
+  }
+
   setStatus(status: { budget?: bigint; bankrupt?: boolean }): void {
     if (status.budget !== undefined) this.#budget = status.budget;
     if (status.bankrupt !== undefined) this.#bankrupt = status.bankrupt;
@@ -103,6 +111,7 @@ export class Reporter {
       sentAt: new Date().toISOString(),
       budget: this.#budget === null ? null : this.#budget.toString(),
       bankrupt: this.#bankrupt,
+      paused: this.#paused,
     };
     await this.#post("/v1/agents/heartbeat", payload, "heartbeat");
   }

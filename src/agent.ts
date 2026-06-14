@@ -114,30 +114,45 @@ export class Agent {
 
   #pausedLogged = false;
 
+  /**
+   * Act loop, pause-responsive. The pause flag is polled on a FAST fixed
+   * interval (CONTROL_POLL, ~15s) decoupled from the slow random act cadence —
+   * so the judge's start/stop button takes effect within seconds, not up to a
+   * full 3-12min tick. The act timer only counts down while NOT paused; the
+   * paused state is mirrored to the reporter so the UI shows "paused".
+   */
   async #loop(ctx: StrategyContext): Promise<void> {
+    const POLL = Number(process.env.AGENT_CONTROL_POLL_MS) || 15000;
+    let actIn = randSpan(this.#cfg.tickMinMs, this.#cfg.tickMaxMs);
     while (this.#running) {
+      let paused = false;
       try {
-        // Fleet-wide pause (judge control): skip acting while paused — the
-        // heartbeat keeps running on its own timer, so the agent stays online,
-        // just idle. Resumes acting the moment the flag clears.
-        if (await this.#reporter.controlPaused()) {
-          if (!this.#pausedLogged) {
-            this.#log.info("fleet paused — idling (heartbeat only)");
-            this.#pausedLogged = true;
-          }
-        } else {
-          if (this.#pausedLogged) {
-            this.#log.info("fleet resumed — acting");
-            this.#pausedLogged = false;
-          }
-          await this.#strategy.tick(ctx);
-        }
-      } catch (err) {
-        this.#log.error("tick threw", { error: String(err) });
+        paused = await this.#reporter.controlPaused();
+      } catch {
+        paused = false; // fail-open: a control outage must not freeze the fleet
       }
-      // Random cadence in [tickMinMs, tickMaxMs] — staggers the fleet so a large
-      // population reads as organic/varied rather than a synchronized burst.
-      await sleep(randSpan(this.#cfg.tickMinMs, this.#cfg.tickMaxMs));
+      this.#reporter.setPaused(paused);
+      if (paused) {
+        if (!this.#pausedLogged) {
+          this.#log.info("fleet paused — idling");
+          this.#pausedLogged = true;
+        }
+      } else {
+        if (this.#pausedLogged) {
+          this.#log.info("fleet resumed — acting");
+          this.#pausedLogged = false;
+        }
+        actIn -= POLL;
+        if (actIn <= 0) {
+          try {
+            await this.#strategy.tick(ctx);
+          } catch (err) {
+            this.#log.error("tick threw", { error: String(err) });
+          }
+          actIn = randSpan(this.#cfg.tickMinMs, this.#cfg.tickMaxMs);
+        }
+      }
+      await sleep(POLL);
     }
   }
 
