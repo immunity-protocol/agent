@@ -25,7 +25,7 @@ const DEPOSIT = BigInt(process.env.FLEET_DEPOSIT ?? "20000000"); // 20 MockUSDC 
 const REP_TARGET = BigInt(process.env.FLEET_REP ?? "100");
 // The autoimmune adversary gets a small bond budget (it loses every bond) and a
 // small starting reputation so the first slash visibly craters it to zero.
-const AUTOIMMUNE_BUDGET = BigInt(process.env.FLEET_AUTOIMMUNE_BUDGET ?? "60000000"); // 60 MockUSDC
+const AUTOIMMUNE_BUDGET = BigInt(process.env.FLEET_AUTOIMMUNE_BUDGET ?? "6000000000"); // 6,000 MockUSDC (~3 blue-chip flags ×1000 bond)
 const AUTOIMMUNE_REP = BigInt(process.env.FLEET_AUTOIMMUNE_REP ?? "30");
 
 const provider = new JsonRpcProvider(RPC, 84532);
@@ -61,10 +61,12 @@ async function grantRep(addr: string, target: bigint): Promise<void> {
 }
 
 async function bootstrapMember(m: FleetMember): Promise<void> {
-  // publisher/corroborator publish; autoimmune publishes (false) flags — all
-  // three must be registered. Hunters only challenge (no registration).
+  // publisher/corroborator publish; autoimmune publishes (false) flags; traders
+  // mint CRE-confirmed novel threats — all must be registered. Hunters only
+  // challenge (no registration).
   const isAdversary = m.role === "autoimmune";
-  const needsRegistration = m.role === "publisher" || m.role === "corroborator" || isAdversary;
+  const needsRegistration =
+    m.role === "publisher" || m.role === "corroborator" || isAdversary || m.role === "trader";
   await topUpGas(m.address);
   await mintUsdc(m.address);
   if (!needsRegistration) {

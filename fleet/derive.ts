@@ -48,7 +48,7 @@ export function buildRoster(mnemonic: string, mix: Record<Role, number>): FleetM
 
 /** Parse "publisher:20,hunter:13,corroborator:12,autoimmune:2" → {publisher:20,...}. */
 export function parseMix(spec: string): Record<Role, number> {
-  const mix: Record<Role, number> = { publisher: 0, hunter: 0, corroborator: 0, autoimmune: 0 };
+  const mix: Record<Role, number> = { publisher: 0, hunter: 0, corroborator: 0, autoimmune: 0, trader: 0 };
   for (const part of spec.split(",")) {
     const [role, n] = part.split(":").map((s) => s.trim());
     if (role in mix) mix[role as Role] = Number(n) || 0;

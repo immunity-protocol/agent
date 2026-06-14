@@ -22,7 +22,11 @@ export async function startImmunity(cfg: AgentConfig): Promise<Immunity> {
   // at runtime, but we build a provider-connected `Wallet` so it's type-correct
   // and the signer is bound to the operator's chosen RPC.
   const wallet = new Wallet(cfg.walletKey, new JsonRpcProvider(network.rpcUrl));
-  const im = new Immunity({ wallet, network });
+  // Traders opt into auto-publish: a CRE-confirmed novel threat surfaced during
+  // check() mints an antibody on-chain (SEMANTIC for injection markers). Gated by
+  // AGENT_AUTO_PUBLISH so the bond-spending write stays explicit per role.
+  const autoPublish = process.env.AGENT_AUTO_PUBLISH === "1";
+  const im = new Immunity({ wallet, network, autoPublishConfirmedThreats: autoPublish });
   await im.start();
   return im;
 }
