@@ -7,6 +7,13 @@ import { type Strategy, type StrategyContext, recordVia } from "./strategy.js";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** Uniform random integer in [min, max] (clamps if a misconfig flips them). */
+const randSpan = (min: number, max: number): number => {
+  const lo = Math.min(min, max);
+  const hi = Math.max(min, max);
+  return lo + Math.floor(Math.random() * (hi - lo + 1));
+};
+
 /**
  * The shared agent skeleton: SDK init → strategy `prepare()` → a check→decide→
  * act loop on `AGENT_TICK_MS` with an independent heartbeat on
@@ -35,7 +42,8 @@ export class Agent {
     this.#log.info("starting", {
       role: this.#cfg.role,
       label: this.#cfg.label,
-      tickMs: this.#cfg.tickMs,
+      tickMinMs: this.#cfg.tickMinMs,
+      tickMaxMs: this.#cfg.tickMaxMs,
       heartbeatMs: this.#cfg.heartbeatMs,
       reporting: this.#reporter.enabled,
     });
@@ -97,7 +105,9 @@ export class Agent {
       } catch (err) {
         this.#log.error("tick threw", { error: String(err) });
       }
-      await sleep(this.#cfg.tickMs);
+      // Random cadence in [tickMinMs, tickMaxMs] — staggers the fleet so a large
+      // population reads as organic/varied rather than a synchronized burst.
+      await sleep(randSpan(this.#cfg.tickMinMs, this.#cfg.tickMaxMs));
     }
   }
 

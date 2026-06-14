@@ -6,7 +6,7 @@
  * Sepolia wallet (and, for publisher/corroborator, a REGISTERED publisher).
  */
 
-export const ROLES = ["publisher", "hunter", "corroborator", "autoimmune", "trader"] as const;
+export const ROLES = ["publisher", "hunter", "corroborator", "autoimmune", "trader", "wolf"] as const;
 export type Role = (typeof ROLES)[number];
 
 export interface AgentConfig {
@@ -20,8 +20,10 @@ export interface AgentConfig {
   rpcUrl?: string;
   /** Base URL of the Immunity app API (heartbeat + activity receiver). */
   apiUrl?: string;
-  /** Strategy tick cadence (ms). */
-  tickMs: number;
+  /** Strategy tick cadence floor (ms) — each cycle sleeps a random span in [min,max]. */
+  tickMinMs: number;
+  /** Strategy tick cadence ceiling (ms). */
+  tickMaxMs: number;
   /** Heartbeat cadence (ms). */
   heartbeatMs: number;
   /** Stable agent id reported in heartbeats/activity. Defaults to label. */
@@ -81,7 +83,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
     agentId: optionalEnv("AGENT_ID") ?? label,
     ...(rpcUrl !== undefined ? { rpcUrl } : {}),
     ...(apiUrl !== undefined ? { apiUrl } : {}),
-    tickMs: intEnv("AGENT_TICK_MS", 30000),
+    tickMinMs: intEnv("AGENT_TICK_MIN_MS", 180000),
+    tickMaxMs: intEnv("AGENT_TICK_MAX_MS", 720000),
     heartbeatMs: intEnv("AGENT_HEARTBEAT_MS", 15000),
     version: optionalEnv("AGENT_VERSION") ?? "0.1.0",
   };
