@@ -66,8 +66,12 @@ export class HunterStrategy implements Strategy {
     if (!this.#ready || ctx.cfg.apiUrl === undefined) return;
 
     const rows = await this.#fetchRecent(ctx);
-    const target = rows.find((r) => this.#isLikelyFalsePositive(r) && !this.#seen.has(r.keccak_id));
-    if (target === undefined) return;
+    // Pick a RANDOM unseen false positive rather than always the first — so a
+    // fleet of hunters spreads across the open false flags instead of all piling
+    // onto the newest one (only the first challenger wins; the rest revert).
+    const candidates = rows.filter((r) => this.#isLikelyFalsePositive(r) && !this.#seen.has(r.keccak_id));
+    if (candidates.length === 0) return;
+    const target = candidates[Math.floor(Math.random() * candidates.length)]!;
     this.#seen.add(target.keccak_id);
 
     try {
@@ -101,15 +105,14 @@ export class HunterStrategy implements Strategy {
   #isLikelyFalsePositive(r: AntibodyRow): boolean {
     if (r.status !== "probation") return false;
     if (r.is_seeded === 1) return false;
-    if ((r.corroboration_count ?? 0) > 0) return false;
-    // Strongest signal: a flag on a protected blue-chip (USDC / WETH / router)
-    // is an autoimmune/DoS attack — challenge it regardless of stated confidence.
+    // A flag on a protected blue-chip (USDC / WETH / router) or a curated
+    // known-good address is a false positive NO MATTER how many naive
+    // corroborators piled on — challenge it regardless of corroboration/confidence.
     if ((r.prominence_tier ?? 0) >= 1) return true;
-    // A flag on a curated known-good (but not-yet-protected) address — the
-    // frontier the challenge game must defend on its own.
     const target = r.primary_matcher?.target?.toLowerCase();
     if (target !== undefined && KNOWN_GOOD_ADDRESSES.has(target)) return true;
     // Otherwise the cheapest safe contest: a low-confidence, uncorroborated advisory.
+    if ((r.corroboration_count ?? 0) > 0) return false;
     return r.confidence < this.#confidenceFloor;
   }
 
