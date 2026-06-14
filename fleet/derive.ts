@@ -24,6 +24,10 @@ export const DEFAULT_MNEMONIC =
  */
 export function buildRoster(mnemonic: string, mix: Record<Role, number>): FleetMember[] {
   const phrase = Mnemonic.fromPhrase(mnemonic.trim());
+  // Cosmetic label/ENS-subname numbering offset (does NOT change the HD index).
+  // Bump it when re-bootstrapping a fresh fleet so labels don't collide with the
+  // *.immunity.eth subnames already minted by a previous fleet.
+  const labelOffset = Number(process.env.FLEET_LABEL_OFFSET ?? "0") || 0;
   const members: FleetMember[] = [];
   let i = 0;
   for (const role of Object.keys(mix) as Role[]) {
@@ -32,7 +36,7 @@ export function buildRoster(mnemonic: string, mix: Record<Role, number>): FleetM
       members.push({
         index: i,
         role,
-        label: `${role}-${String(n + 1).padStart(2, "0")}`,
+        label: `${role}-${String(labelOffset + n + 1).padStart(2, "0")}`,
         address: w.address.toLowerCase(),
         privateKey: w.privateKey,
       });

@@ -7,3 +7,4 @@ dist/
 .DS_Store
 fleet/.mnemonic
 fleet/fleet.json
+.fleet.env
