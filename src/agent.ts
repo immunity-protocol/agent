@@ -4,6 +4,7 @@ import { createLogger } from "./log.js";
 import { Reporter } from "./reporter.js";
 import { selectStrategy } from "./roles/index.js";
 import { type Strategy, type StrategyContext, recordVia } from "./strategy.js";
+import { runCommand } from "./commands.js";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -80,6 +81,35 @@ export class Agent {
     // The act loop is awaited per tick (no overlapping ticks) on a recursive
     // timer rather than setInterval, so a slow tick never stacks.
     void this.#loop(ctx);
+
+    // Playground command loop — a SEPARATE fast poll (default 15s) so judge
+    // actions get a few-second response regardless of the slow, randomized act
+    // cadence. Runs even while the fleet is "paused" (judge actions are explicit).
+    void this.#commandLoop(ctx);
+  }
+
+  async #commandLoop(ctx: StrategyContext): Promise<void> {
+    if (this.#cfg.apiUrl === undefined) return; // no API → no playground
+    const pollMs = Number(process.env.AGENT_COMMAND_POLL_MS) || 15000;
+    while (this.#running) {
+      try {
+        const cmd = await this.#reporter.nextCommand();
+        if (cmd) {
+          this.#log.info("running playground command", { id: cmd.id, type: cmd.commandType });
+          let result;
+          try {
+            result = await runCommand(cmd, ctx);
+          } catch (err) {
+            result = { status: "failed" as const, detail: { error: String(err).slice(0, 200) } };
+          }
+          await this.#reporter.completeCommand(cmd.id, result.status, result.detail);
+          continue; // drain the queue fast — don't sleep between queued commands
+        }
+      } catch (err) {
+        this.#log.warn("command loop error", { error: String(err) });
+      }
+      await sleep(pollMs);
+    }
   }
 
   #pausedLogged = false;

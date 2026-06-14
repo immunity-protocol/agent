@@ -137,6 +137,30 @@ export class Reporter {
     }
   }
 
+  /**
+   * Claim the next pending playground command for this agent (or null). The
+   * server atomically marks it picked up so two pollers never run it twice.
+   * Best-effort; never throws.
+   */
+  async nextCommand(): Promise<{ id: number; commandType: string; payload: Record<string, unknown> } | null> {
+    if (this.#cfg.apiUrl === undefined) return null;
+    const url = `${this.#cfg.apiUrl.replace(/\/$/, "")}/v1/agents/commands/next?agentId=${encodeURIComponent(this.#cfg.agentId)}`;
+    try {
+      const res = await fetch(url, { headers: { accept: "application/json" } });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { command?: { id: number; command_type: string; payload: Record<string, unknown> } | null };
+      if (!data.command) return null;
+      return { id: data.command.id, commandType: data.command.command_type, payload: data.command.payload ?? {} };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Report a command's result so the playground modal can render it. */
+  async completeCommand(id: number, status: string, detail: unknown): Promise<void> {
+    await this.#post(`/v1/agents/commands/${id}/result`, { status, detail }, "command-result");
+  }
+
   async #post(path: string, body: unknown, kind: string): Promise<void> {
     if (this.#cfg.apiUrl === undefined) return; // offline / local-only
     const url = `${this.#cfg.apiUrl.replace(/\/$/, "")}${path}`;
