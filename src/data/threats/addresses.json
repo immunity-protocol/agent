@@ -1,0 +1,107 @@
+[
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0x8589427373d6d84e98730d7795d8f6f8731fda16" },
+    "verdict": "MALICIOUS", "confidence": 96, "severity": 95, "expires_at": 0,
+    "reasoning": "Relayer wallet listed on the OFAC SDN designation of Tornado Cash on August 8, 2022. US persons and entities subject to US sanctions law are prohibited from transacting with this address; downstream interactions inherit secondary-sanctions exposure under Treasury guidance. Verdict is MALICIOUS at high confidence because the SDN listing is a binding legal artifact, not an inference. An agent hitting this counterparty should refuse outright and surface the OFAC notice to the operator.",
+    "seed_source": "ofac_sdn",
+    "evidence_url": "https://ofac.treasury.gov/recent-actions/20220808"
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0x722122df12d4e14e13ac3b6895a86e84145b6967" },
+    "verdict": "MALICIOUS", "confidence": 96, "severity": 94, "expires_at": 0,
+    "reasoning": "Primary Tornado Cash router contract included in the August 8, 2022 OFAC SDN action against the Tornado Cash mixer. This is the canonical Ethereum entrypoint used by the deposit and withdraw UI; any approve, deposit, or withdrawal call routes through this address. The MALICIOUS verdict reflects the SDN listing rather than a behavioral signal: interaction by US persons constitutes a sanctions violation regardless of intent.",
+    "seed_source": "ofac_sdn",
+    "evidence_url": "https://ofac.treasury.gov/recent-actions/20220808"
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0xdd4c48c0b24039969fc16d1cdf626eab821d3384" },
+    "verdict": "MALICIOUS", "confidence": 94, "severity": 92, "expires_at": 0,
+    "reasoning": "Tornado Cash deposit pool contract sanctioned in the August 2022 OFAC action. Funds entering this pool become indistinguishable from other sanctioned-mixer flows on exit, which is why downstream graph-taint antibodies derive directly from this and four sibling pools. The MALICIOUS classification mirrors the legal status; severity is calibrated against the audit-trail consequences of routing user funds through a sanctioned mixer.",
+    "seed_source": "ofac_sdn",
+    "evidence_url": "https://ofac.treasury.gov/recent-actions/20220808"
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0xd90e2f925da726b50c4ed8d0fb90ad053324f31b" },
+    "verdict": "MALICIOUS", "confidence": 93, "severity": 91, "expires_at": 0,
+    "reasoning": "Auxiliary Tornado Cash router included in the OFAC SDN block of August 8, 2022. Operators redeployed several router variants over the project's lifetime to balance pool selection; this address belongs to that fleet. Verdict is MALICIOUS based on the SDN listing alone: the variant is functionally interchangeable with the primary router and inherits the same sanctions exposure.",
+    "seed_source": "ofac_sdn",
+    "evidence_url": "https://ofac.treasury.gov/recent-actions/20220808"
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0x910cbd523d972eb0a6f4cae4618ad62622b39dbf" },
+    "verdict": "MALICIOUS", "confidence": 92, "severity": 90, "expires_at": 0,
+    "reasoning": "Relayer node from the Tornado Cash relayer set on the OFAC SDN list. Relayer nodes submit user withdrawals on the depositor's behalf to break the deposit and withdraw link, which is the obfuscation mechanic that triggered the sanctions designation. Treating this address as MALICIOUS is required by the SDN action; a check hit here should block before broadcast and log the sanctions context for compliance.",
+    "seed_source": "ofac_sdn",
+    "evidence_url": "https://ofac.treasury.gov/recent-actions/20220808"
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0x6b75d8af000000e20b7a7ddf000ba900b4009a80" },
+    "verdict": "MALICIOUS", "confidence": 88, "severity": 71, "expires_at": 0,
+    "reasoning": "Sandwich-MEV operator known publicly as jaredfromsubway.eth, historically the single largest sandwich-attack bot on Ethereum mainnet by extracted value. Etherscan and MEV-explorer aggregations attribute over $25M in cumulative MEV against retail swaps to this wallet. Verdict is MALICIOUS rather than SUSPICIOUS because the activity is well-documented, sustained, and adversarial-by-design; severity is moderated because individual swap victims see slippage rather than total loss.",
+    "seed_source": "etherscan_public",
+    "evidence_url": "https://etherscan.io/address/0x6b75d8af000000e20b7a7ddf000ba900b4009a80"
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0x000000000035b5e5ad9019092c665357240f594e" },
+    "verdict": "SUSPICIOUS", "confidence": 79, "severity": 64, "expires_at": 0,
+    "reasoning": "Address surfaced repeatedly in public MEV-watcher feeds as an active sandwich-attack bot operating against Uniswap V2 and V3 retail flow. Verdict is SUSPICIOUS rather than MALICIOUS because sandwich extraction sits in a contested category (abusive but not technically a fund-loss exploit), and the address operator has not been individually attributed. Operators should treat this as an adversarial counterparty for any swap with non-trivial slippage.",
+    "seed_source": "mev_explorer",
+    "evidence_url": "https://etherscan.io/address/0x000000000035b5e5ad9019092c665357240f594e"
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0x0000d38a234679f88dd6343d34e26dcb50c30000" },
+    "verdict": "MALICIOUS", "confidence": 91, "severity": 88, "expires_at": 0,
+    "reasoning": "Wallet attributed to the Inferno Drainer phishing-as-a-service kit, tracked across multiple Q4 2024 campaigns by SlowMist and downstream incident-response feeds. The Inferno operators rent the drainer template to affiliates who pair it with fake mint and airdrop pages; this address is one of the consolidation wallets receiving stolen approvals. MALICIOUS at high confidence given the documented campaign attribution and the extensive victim list aggregated by SlowMist.",
+    "seed_source": "slowmist_inferno_q4_2024",
+    "evidence_url": "https://slowmist.medium.com/"
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0x9f2c3ad13e0f12c0eb28ddec6eab1d5b4ecc3fcd" },
+    "verdict": "MALICIOUS", "confidence": 89, "severity": 87, "expires_at": 0,
+    "reasoning": "Drainer-affiliate wallet attributed to the Pink Drainer kit during ScamSniffer's early-2024 phishing sweep. Pink Drainer is a competing kit to Inferno that gained share after several Inferno operators rotated suppliers; the kits share laundering rails despite distinct deploy fingerprints. Verdict is MALICIOUS at high confidence based on the ScamSniffer warnlist entry and corroborating incident-response disclosures.",
+    "seed_source": "scamsniffer_warnlist",
+    "evidence_url": "https://github.com/scamsniffer/scam-database"
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0x098b716b8aaf21512996dc57eb0615e2383e2f96" },
+    "verdict": "MALICIOUS", "confidence": 92, "severity": 89, "expires_at": 0,
+    "reasoning": "Consolidation address from the June 2023 Atomic Wallet incident in which over $100M of user funds were drained from compromised installations. Elliptic's post-incident analysis attributes the operation to the DPRK-aligned Lazarus Group, citing characteristic chain-hopping and mixer-staging behavior. MALICIOUS at high confidence because both the incident and the actor attribution are publicly documented, and any approve targeting this address recovers no legitimate flow.",
+    "seed_source": "elliptic_atomic_2023",
+    "evidence_url": "https://www.elliptic.co/blog/the-100-million-atomic-wallet-heist-may-be-the-work-of-north-koreas-lazarus-group"
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0x000a8b7d6e7d8d1a8e2c2d4d4c4d4d4d4d4d4d4d" },
+    "verdict": "SUSPICIOUS", "confidence": 73, "severity": 68, "expires_at": 1798755200,
+    "reasoning": "Wallet flagged by behavioral telemetry: a deployment age under 14 days paired with a high outbound-approve density and zero swap or transfer originations. The fingerprint matches the phishing-collector profile that surfaces on third-party warnlists about a week before public attribution. Verdict is SUSPICIOUS because the signals are circumstantial; an operator should require explicit confirmation before any approve to this counterparty.",
+    "seed_source": "sentinel_telemetry",
+    "evidence_url": null
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0x00112233445566778899aabbccddeeff00112233" },
+    "verdict": "SUSPICIOUS", "confidence": 71, "severity": 66, "expires_at": 1798755200,
+    "reasoning": "Counterparty exhibits the cold-then-burst pattern characteristic of drainer collection wallets: months of dormancy followed by clustered approve receipts from previously unrelated EOAs. Sibling-address proximity in deployment metadata further raises the prior. Verdict held at SUSPICIOUS rather than MALICIOUS because no completed drain has been observed yet and the cluster could still resolve as a benign automated trader.",
+    "seed_source": "sentinel_telemetry",
+    "evidence_url": null
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0xbadc0debadc0debadc0debadc0debadc0deb1aa5" },
+    "verdict": "MALICIOUS", "confidence": 87, "severity": 79, "expires_at": 1798755200,
+    "reasoning": "Token contract whose transfer and transferFrom paths revert for any caller other than the deployer's allowlist. Static analysis surfaced the gating in the buy-but-cannot-sell honeypot family: legitimate-looking pool, asymmetric exit. MALICIOUS at high confidence because the asymmetry is structural rather than configurable, so any retail buy is a guaranteed loss-of-position.",
+    "seed_source": "internal_research",
+    "evidence_url": null
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0xdeadc0dedeadc0dedeadc0dedeadc0dedeadc0de" },
+    "verdict": "MALICIOUS", "confidence": 84, "severity": 78, "expires_at": 1798755200,
+    "reasoning": "Wallet observed funding multiple drainer-template clones across two distinct hosting clusters in the past 30 days. Each clone follows the same approve-then-sweep choreography within minutes of victim signature. The funding pattern and the receipt of stolen approvals together meet the bar for MALICIOUS classification, though no single victim wallet has yet filed a public attribution.",
+    "seed_source": "sentinel_telemetry",
+    "evidence_url": null
+  },
+  {
+    "seed": { "abType": "ADDRESS", "chainId": 16602, "target": "0xfeedfeedfeedfeedfeedfeedfeedfeedfeedfeed" },
+    "verdict": "MALICIOUS", "confidence": 86, "severity": 81, "expires_at": 1798755200,
+    "reasoning": "Drainer collection wallet linked to a family that internal trackers label 'eat-feed' after its deterministic CREATE2 salt prefix. Operators redeploy the affiliate fronts every 6 to 10 days but consolidate to a small set of long-lived collectors of which this is one. MALICIOUS verdict reflects the consolidation role; severity reflects the typical per-victim approval value for the kit.",
+    "seed_source": "sentinel_telemetry",
+    "evidence_url": null
+  }
+]
