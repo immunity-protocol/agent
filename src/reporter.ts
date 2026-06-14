@@ -36,6 +36,10 @@ export interface HeartbeatPayload {
   version: string;
   /** ISO-8601 timestamp the agent emitted this heartbeat. */
   sentAt: string;
+  /** Remaining bond budget (USDC, 6dp) — only the autoimmune adversary reports it. */
+  budget?: string | null;
+  /** Whether the agent has exhausted its budget (autoimmune only). */
+  bankrupt?: boolean;
 }
 
 /**
@@ -64,6 +68,8 @@ export class Reporter {
   readonly #log: Logger;
   #wallet: string | null = null;
   #ens: string | null = null;
+  #budget: bigint | null = null;
+  #bankrupt = false;
 
   constructor(cfg: AgentConfig, log: Logger) {
     this.#cfg = cfg;
@@ -74,6 +80,12 @@ export class Reporter {
   bindIdentity(wallet: string, ens: string | null): void {
     this.#wallet = wallet;
     this.#ens = ens;
+  }
+
+  /** Update the budget/bankrupt status carried on the next heartbeat (autoimmune). */
+  setStatus(status: { budget?: bigint; bankrupt?: boolean }): void {
+    if (status.budget !== undefined) this.#budget = status.budget;
+    if (status.bankrupt !== undefined) this.#bankrupt = status.bankrupt;
   }
 
   get enabled(): boolean {
@@ -89,6 +101,8 @@ export class Reporter {
       ens: this.#ens,
       version: this.#cfg.version,
       sentAt: new Date().toISOString(),
+      budget: this.#budget === null ? null : this.#budget.toString(),
+      bankrupt: this.#bankrupt,
     };
     await this.#post("/v1/agents/heartbeat", payload, "heartbeat");
   }

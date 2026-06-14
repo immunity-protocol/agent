@@ -51,6 +51,7 @@ export class Agent {
       wallet,
       log: createLogger(`role:${this.#cfg.role}`),
       record: recordVia(this.#reporter, this.#log),
+      reportStatus: (status) => this.#reporter.setStatus(status),
     };
 
     if (this.#strategy.prepare) {

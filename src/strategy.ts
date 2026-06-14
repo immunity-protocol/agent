@@ -15,6 +15,8 @@ export interface StrategyContext {
   wallet: string;
   log: Logger;
   record: RecordActivity;
+  /** Report budget/bankrupt status carried on the next heartbeat (autoimmune only). */
+  reportStatus?: (status: { budget?: bigint; bankrupt?: boolean }) => void;
 }
 
 /**

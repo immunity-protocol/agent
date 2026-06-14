@@ -6,7 +6,7 @@
  * Sepolia wallet (and, for publisher/corroborator, a REGISTERED publisher).
  */
 
-export const ROLES = ["publisher", "hunter", "corroborator"] as const;
+export const ROLES = ["publisher", "hunter", "corroborator", "autoimmune"] as const;
 export type Role = (typeof ROLES)[number];
 
 export interface AgentConfig {
