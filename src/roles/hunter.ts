@@ -1,4 +1,5 @@
 import type { Strategy, StrategyContext } from "../strategy.js";
+import { KNOWN_GOOD_ADDRESSES } from "./autoimmune.js";
 import { selfCheck } from "./self-check.js";
 
 /**
@@ -15,6 +16,10 @@ interface AntibodyRow {
   severity: number;
   is_seeded?: number;
   corroboration_count?: number;
+  /** 1 = the target is on the protected set (flagging it is an obvious FP). */
+  prominence_tier?: number;
+  /** The matcher seed; `target` is the flagged address. */
+  primary_matcher?: { target?: string } | null;
 }
 
 /**
@@ -70,7 +75,7 @@ export class HunterStrategy implements Strategy {
       ctx.log.info("challenged antibody", { immId: target.imm_id, bond: result.bond.toString() });
       ctx.record({
         actionType: "challenge",
-        actionSummary: `Challenged ${target.imm_id} (low publisher confidence ${target.confidence})`,
+        actionSummary: `Challenged ${target.imm_id} — ${this.#challengeReason(target)}`,
         status: "info",
         antibodyImmId: target.imm_id,
         txHash: result.txHash,
@@ -86,10 +91,25 @@ export class HunterStrategy implements Strategy {
     }
   }
 
+  #challengeReason(r: AntibodyRow): string {
+    if ((r.prominence_tier ?? 0) >= 1) return "flagged a PROTECTED blue-chip address";
+    const target = r.primary_matcher?.target?.toLowerCase();
+    if (target !== undefined && KNOWN_GOOD_ADDRESSES.has(target)) return "flagged a known-good address";
+    return `low publisher confidence (${r.confidence})`;
+  }
+
   #isLikelyFalsePositive(r: AntibodyRow): boolean {
     if (r.status !== "probation") return false;
     if (r.is_seeded === 1) return false;
     if ((r.corroboration_count ?? 0) > 0) return false;
+    // Strongest signal: a flag on a protected blue-chip (USDC / WETH / router)
+    // is an autoimmune/DoS attack — challenge it regardless of stated confidence.
+    if ((r.prominence_tier ?? 0) >= 1) return true;
+    // A flag on a curated known-good (but not-yet-protected) address — the
+    // frontier the challenge game must defend on its own.
+    const target = r.primary_matcher?.target?.toLowerCase();
+    if (target !== undefined && KNOWN_GOOD_ADDRESSES.has(target)) return true;
+    // Otherwise the cheapest safe contest: a low-confidence, uncorroborated advisory.
     return r.confidence < this.#confidenceFloor;
   }
 
