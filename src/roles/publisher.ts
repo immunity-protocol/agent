@@ -1,5 +1,5 @@
 import type { Strategy, StrategyContext } from "../strategy.js";
-import { type CorpusCase, loadCorpus, toPublishInput } from "../data/corpus.js";
+import { type CorpusCase, loadCorpus, pick, toPublishInput } from "../data/corpus.js";
 import { selfCheck } from "./self-check.js";
 
 /**
@@ -16,15 +16,12 @@ import { selfCheck } from "./self-check.js";
 export class PublisherStrategy implements Strategy {
   readonly role = "publisher";
   #corpus: CorpusCase[] = [];
-  #order: number[] = [];
-  #cursor = 0;
   #ready = false;
+  // Per-tick odds of publishing a corpus threat (vs a self-check). Tunable.
+  #publishRate = Number(process.env.AGENT_PUBLISHER_RATE ?? "0.8");
 
   async prepare(ctx: StrategyContext): Promise<void> {
     this.#corpus = loadCorpus();
-    // Shuffle so 8 publishers don't all race the same case first (spreads the
-    // first-publisher wins across the corpus, the rest become corroborations).
-    this.#order = this.#corpus.map((_, i) => i).sort(() => Math.random() - 0.5);
     ctx.log.info("loaded threat corpus", {
       count: this.#corpus.length,
       byType: this.#corpus.reduce<Record<string, number>>((a, c) => {
@@ -49,15 +46,15 @@ export class PublisherStrategy implements Strategy {
   }
 
   async tick(ctx: StrategyContext): Promise<void> {
-    if (!this.#ready || this.#cursor >= this.#order.length) {
+    // Every tick the publisher does something: mostly publish a random corpus
+    // threat (re-attempts on already-published targets surface as AntibodyExists
+    // and feed corroboration), otherwise a self-check for steady telemetry.
+    const rate = Number.isFinite(this.#publishRate) ? this.#publishRate : 0.8;
+    if (!this.#ready || this.#corpus.length === 0 || Math.random() >= rate) {
       await selfCheck(ctx);
       return;
     }
-    const idx = this.#order[this.#cursor];
-    this.#cursor += 1;
-    if (idx === undefined) return;
-    const candidate = this.#corpus[idx];
-    if (candidate === undefined) return;
+    const candidate = pick(this.#corpus);
 
     const label = describeSeed(candidate);
     try {
