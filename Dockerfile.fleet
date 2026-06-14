@@ -1,0 +1,36 @@
+# Immunity FLEET supervisor — one image that spawns the whole fleet.
+#
+# Same cross-context build as Dockerfile (the agent links the SDK by path), so
+# build from the PARENT dir holding both immunity-agent and immunity-sdk:
+#
+#   docker build -f immunity-agent/Dockerfile.fleet -t immunity-fleet ..
+#
+# The supervisor re-derives every agent wallet from FLEET_MNEMONIC and spawns one
+# `node dist/index.js` child per fleet member. It runs via tsx (fleet/ is not part
+# of the dist build), so tsx is kept in the runtime image.
+
+FROM node:20-alpine AS build
+WORKDIR /build
+COPY immunity-sdk/ ./immunity-sdk/
+COPY immunity-agent/package.json immunity-agent/package-lock.json* ./immunity-agent/
+WORKDIR /build/immunity-agent
+RUN npm install --no-audit --no-fund
+COPY immunity-agent/tsconfig.json ./
+COPY immunity-agent/src/ ./src/
+COPY immunity-agent/fleet/ ./fleet/
+RUN npm run build
+
+FROM node:20-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build /build/immunity-sdk /immunity-sdk
+# Keep the full node_modules (tsx + ethers) — the supervisor runs fleet/*.ts via tsx.
+COPY --from=build /build/immunity-agent/node_modules ./node_modules
+COPY --from=build /build/immunity-agent/dist ./dist
+COPY --from=build /build/immunity-agent/fleet ./fleet
+COPY --from=build /build/immunity-agent/package.json ./package.json
+USER node
+
+# Supervisor spawns dist/index.js children (ENTRY resolves to ../dist/index.js
+# from fleet/, i.e. /app/dist/index.js). Role mix + identity come from env.
+ENTRYPOINT ["node", "--import", "tsx", "fleet/supervisor.ts"]
