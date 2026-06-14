@@ -23,6 +23,10 @@ const USDC_MINT = BigInt(process.env.FLEET_USDC_MINT ?? "100000000"); // 100 Moc
 const USDC_FLOOR = BigInt(process.env.FLEET_USDC_FLOOR ?? "20000000"); // 20 MockUSDC
 const DEPOSIT = BigInt(process.env.FLEET_DEPOSIT ?? "20000000"); // 20 MockUSDC into the operator balance
 const REP_TARGET = BigInt(process.env.FLEET_REP ?? "100");
+// The autoimmune adversary gets a small bond budget (it loses every bond) and a
+// small starting reputation so the first slash visibly craters it to zero.
+const AUTOIMMUNE_BUDGET = BigInt(process.env.FLEET_AUTOIMMUNE_BUDGET ?? "60000000"); // 60 MockUSDC
+const AUTOIMMUNE_REP = BigInt(process.env.FLEET_AUTOIMMUNE_REP ?? "30");
 
 const provider = new JsonRpcProvider(RPC, 84532);
 const deployer = new NonceManager(new Wallet(process.env.DEPLOYER_PRIVATE_KEY as string, provider));
@@ -50,29 +54,35 @@ async function mintUsdc(addr: string): Promise<void> {
   await (await usdc.mint(addr, USDC_MINT)).wait();
 }
 
-async function grantRep(addr: string): Promise<void> {
+async function grantRep(addr: string, target: bigint): Promise<void> {
   const score: bigint = await reputation.scoreOf(addr);
-  if (score >= REP_TARGET) return;
-  await (await reputation.grantGenesisReputation(addr, REP_TARGET)).wait();
+  if (score >= target) return;
+  await (await reputation.grantGenesisReputation(addr, target - score)).wait();
 }
 
 async function bootstrapMember(m: FleetMember): Promise<void> {
-  const needsRegistration = m.role === "publisher" || m.role === "corroborator";
+  // publisher/corroborator publish; autoimmune publishes (false) flags — all
+  // three must be registered. Hunters only challenge (no registration).
+  const isAdversary = m.role === "autoimmune";
+  const needsRegistration = m.role === "publisher" || m.role === "corroborator" || isAdversary;
   await topUpGas(m.address);
   await mintUsdc(m.address);
   if (!needsRegistration) {
     console.log(`  ${m.label} (${m.role}) ${m.address} — gas+USDC only`);
     return;
   }
-  await grantRep(m.address);
+  // The adversary gets a small starting reputation (craters on first slash);
+  // honest publishers get the genesis grant that lets them hard-block.
+  await grantRep(m.address, isAdversary ? AUTOIMMUNE_REP : REP_TARGET);
   const im = new Immunity({ wallet: new Wallet(m.privateKey, provider), network: BASE_SEPOLIA });
   await im.start();
   if (!(await im.isRegistered())) {
     await im.registerPublisher(m.label); // mints <label>.immunity.eth
   }
+  const deposit = isAdversary ? AUTOIMMUNE_BUDGET : DEPOSIT;
   const bal = await im.balanceOf();
-  if (bal < DEPOSIT) await im.deposit(DEPOSIT - bal);
-  console.log(`  ${m.label} (${m.role}) ${m.address} — registered + deposited`);
+  if (bal < deposit) await im.deposit(deposit - bal);
+  console.log(`  ${m.label} (${m.role}) ${m.address} — registered + ${isAdversary ? "funded budget" : "deposited"}`);
 }
 
 (async () => {
