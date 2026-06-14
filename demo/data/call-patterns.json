@@ -1,0 +1,93 @@
+[
+  {
+    "seed": {
+      "abType": "CALL_PATTERN",
+      "chainId": 16602,
+      "target": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
+      "selector": "0x095ea7b3",
+      "argsTemplate": "0x"
+    },
+    "verdict": "MALICIOUS", "confidence": 91, "severity": 88, "expires_at": 0,
+    "reasoning": "ERC20 approve(spender, amount) call targeting the consolidation address attributed to the June 2023 Atomic Wallet incident. The selector-only match (no argsTemplate gating) is intentional: any approval to this counterparty enables the drain regardless of token or amount. MALICIOUS at high confidence, severity high: a successful approval here lets Lazarus-attributed infrastructure pull the entire approved balance asynchronously.",
+    "seed_source": "elliptic_atomic_2023",
+    "evidence_url": "https://www.elliptic.co/blog/the-100-million-atomic-wallet-heist-may-be-the-work-of-north-koreas-lazarus-group"
+  },
+  {
+    "seed": {
+      "abType": "CALL_PATTERN",
+      "chainId": 16602,
+      "target": "0x9f2c3ad13e0f12c0eb28ddec6eab1d5b4ecc3fcd",
+      "selector": "0x095ea7b3",
+      "argsTemplate": "0x"
+    },
+    "verdict": "MALICIOUS", "confidence": 87, "severity": 84, "expires_at": 0,
+    "reasoning": "Token approval call where the spender is the Pink Drainer affiliate contract. Drainer kits depend on victims signing arbitrary approve calls on phishing pages; once granted, the kit sweeps balance on a separate transaction. Selector-only match keeps the antibody robust to token rotation. Verdict MALICIOUS: there is no benign reason for an agent to approve this counterparty.",
+    "seed_source": "scamsniffer_warnlist",
+    "evidence_url": "https://github.com/scamsniffer/scam-database"
+  },
+  {
+    "seed": {
+      "abType": "CALL_PATTERN",
+      "chainId": 16602,
+      "target": "0x0000d38a234679f88dd6343d34e26dcb50c30000",
+      "selector": "0xa22cb465",
+      "argsTemplate": "0x"
+    },
+    "verdict": "MALICIOUS", "confidence": 89, "severity": 86, "expires_at": 0,
+    "reasoning": "ERC721 and ERC1155 setApprovalForAll(operator, true) where the operator is an Inferno Drainer collector. This selector grants whole-collection withdraw rights to the operator and is the dominant primitive for NFT phishing drains in Q4 2024 incident reports. MALICIOUS verdict reflects the irreversibility within the approval window: once the kit's sweeper sees the approval, it pulls the entire collection in a single transaction.",
+    "seed_source": "slowmist_inferno_q4_2024",
+    "evidence_url": "https://slowmist.medium.com/"
+  },
+  {
+    "seed": {
+      "abType": "CALL_PATTERN",
+      "chainId": 16602,
+      "target": "0xdeadc0dedeadc0dedeadc0dedeadc0dedeadc0de",
+      "selector": "0x095ea7b3",
+      "argsTemplate": "0x"
+    },
+    "verdict": "MALICIOUS", "confidence": 83, "severity": 78, "expires_at": 1798755200,
+    "reasoning": "ERC20 approve(spender, amount) call where the spender matches a wallet flagged by sentinel telemetry as a drainer collector. The selector-only match deliberately ignores token and amount: granting any allowance to this counterparty exposes the corresponding balance to asynchronous sweep. MALICIOUS verdict tracks the underlying address antibody.",
+    "seed_source": "sentinel_telemetry",
+    "evidence_url": null
+  },
+  {
+    "seed": {
+      "abType": "CALL_PATTERN",
+      "chainId": 16602,
+      "target": "0xfeedfeedfeedfeedfeedfeedfeedfeedfeedfeed",
+      "selector": "0xa22cb465",
+      "argsTemplate": "0x"
+    },
+    "verdict": "MALICIOUS", "confidence": 81, "severity": 77, "expires_at": 1798755200,
+    "reasoning": "setApprovalForAll(operator, true) call granting whole-collection NFT spend rights to a known drainer-family operator wallet. Once granted the operator can sweep every token in the collection within the approval window. MALICIOUS: there is no legitimate flow that requires unrestricted whole-collection withdraw rights to an opaque operator.",
+    "seed_source": "sentinel_telemetry",
+    "evidence_url": null
+  },
+  {
+    "seed": {
+      "abType": "CALL_PATTERN",
+      "chainId": 16602,
+      "target": "0xbadc0debadc0debadc0debadc0debadc0deb1aa5",
+      "selector": "0x23b872dd",
+      "argsTemplate": "0x"
+    },
+    "verdict": "SUSPICIOUS", "confidence": 74, "severity": 69, "expires_at": 1798755200,
+    "reasoning": "transferFrom selector targeting a contract previously flagged as a buy-but-cannot-sell honeypot ERC20. The token's _transfer override gates the sell branch behind a deployer allowlist, so any third-party initiated outbound transfer reverts. Verdict held at SUSPICIOUS because legitimate restricted-token flows share the same selector signature; the antibody surfaces the honeypot context to the operator without auto-blocking.",
+    "seed_source": "internal_research",
+    "evidence_url": null
+  },
+  {
+    "seed": {
+      "abType": "CALL_PATTERN",
+      "chainId": 16602,
+      "target": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
+      "selector": "0xd505accf",
+      "argsTemplate": "0x"
+    },
+    "verdict": "MALICIOUS", "confidence": 92, "severity": 91, "expires_at": 0,
+    "reasoning": "EIP-2612 permit() call submitting a victim's gasless signature with the Atomic Wallet drainer as the spender. Permit-based drains are particularly damaging because the victim's wallet UI shows a signature request rather than a transaction, lowering the suspicion threshold. MALICIOUS at the highest confidence: the only reason to submit a permit naming a sanctioned-attribution drainer is to execute a drain. Severity reflects the full-balance approval semantics of permit.",
+    "seed_source": "elliptic_atomic_2023",
+    "evidence_url": "https://www.elliptic.co/blog/the-100-million-atomic-wallet-heist-may-be-the-work-of-north-koreas-lazarus-group"
+  }
+]

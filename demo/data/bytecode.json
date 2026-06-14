@@ -1,0 +1,62 @@
+[
+  {
+    "seed": {
+      "abType": "BYTECODE",
+      "bytecodeHash": "0x9c4f8a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f"
+    },
+    "verdict": "MALICIOUS", "confidence": 89, "severity": 87, "expires_at": 0,
+    "reasoning": "keccak256 hash of the deployed runtime for the Inferno Drainer template contract. Affiliates redeploy the same template to fresh addresses to evade per-address blocklists, but the runtime hash is invariant under EIP-170 deploy mechanics. SlowMist's Q4 2024 tracking links the hash to dozens of attributable victim incidents. MALICIOUS at high confidence; a bytecode match is a stronger primitive than an address match because it survives address rotation.",
+    "seed_source": "slowmist_inferno_q4_2024",
+    "evidence_url": "https://slowmist.medium.com/"
+  },
+  {
+    "seed": {
+      "abType": "BYTECODE",
+      "bytecodeHash": "0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1234"
+    },
+    "verdict": "MALICIOUS", "confidence": 86, "severity": 83, "expires_at": 0,
+    "reasoning": "Deployed-runtime hash of the Pink Drainer kit. Operators rotate deploy addresses on a daily-to-weekly cadence, but they reuse a single compiled artifact, so the bytecode hash anchors detection across the entire affiliate fleet. Attribution comes from ScamSniffer's warnlist correlation between kit deployments and stolen-approval receipts. Treating bytecode matches as MALICIOUS short-circuits the affiliate-rotation game.",
+    "seed_source": "scamsniffer_warnlist",
+    "evidence_url": "https://github.com/scamsniffer/scam-database"
+  },
+  {
+    "seed": {
+      "abType": "BYTECODE",
+      "bytecodeHash": "0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f12345a"
+    },
+    "verdict": "SUSPICIOUS", "confidence": 78, "severity": 71, "expires_at": 1798755200,
+    "reasoning": "Bytecode hash of an ERC20 template that ships with hidden owner-gated sell logic: anyone can buy, only the deployer's allowlist can sell. Static analysis of the runtime surfaces the gate in the _transfer override, but most casual review tools miss it because the gate is reachable only on the sell branch. Verdict held at SUSPICIOUS rather than MALICIOUS because the same template ships in legitimate (compliance-restricted) form; severity reflects the asymmetric loss profile if hit.",
+    "seed_source": "internal_research",
+    "evidence_url": null
+  },
+  {
+    "seed": {
+      "abType": "BYTECODE",
+      "bytecodeHash": "0x3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f12345abc"
+    },
+    "verdict": "MALICIOUS", "confidence": 84, "severity": 80, "expires_at": 0,
+    "reasoning": "Runtime hash of the contract used in the June 2023 Atomic Wallet drain. Elliptic's 2023 incident report attributes the operation to the DPRK-aligned Lazarus Group based on chain-hopping signatures and prior-incident overlap. The bytecode hash is the most durable primitive for this incident because the operators frequently reuse runtime artifacts across redeployments. MALICIOUS verdict mirrors both the incident attribution and the sanctioned-actor designation.",
+    "seed_source": "elliptic_atomic_2023",
+    "evidence_url": "https://www.elliptic.co/blog/the-100-million-atomic-wallet-heist-may-be-the-work-of-north-koreas-lazarus-group"
+  },
+  {
+    "seed": {
+      "abType": "BYTECODE",
+      "bytecodeHash": "0x4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f12345abcde"
+    },
+    "verdict": "SUSPICIOUS", "confidence": 76, "severity": 70, "expires_at": 1798755200,
+    "reasoning": "Helper-contract bytecode that wraps a Permit2 signature into a single-call drain primitive: the victim signs once and the helper consumes the signature on a downstream sweep. The pattern is double-edged: the same mechanic underlies several legitimate approval-management UIs, so the runtime alone is not conclusive. SUSPICIOUS verdict prompts the agent to surface the signature semantics to the operator before submitting.",
+    "seed_source": "internal_research",
+    "evidence_url": null
+  },
+  {
+    "seed": {
+      "abType": "BYTECODE",
+      "bytecodeHash": "0x5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f12345abcdef0"
+    },
+    "verdict": "MALICIOUS", "confidence": 83, "severity": 79, "expires_at": 0,
+    "reasoning": "Bytecode of a widely-cloned sandwich-attack contract template, indexed by mevwatch.info and several Etherscan-verified deployments. The template implements the classic two-leg flash-frontrun-backrun pattern against AMM swaps. Verdict is MALICIOUS at moderate-high confidence: the contract's only honest use is sandwich MEV, but the practice itself is contested as 'abusive but legal' rather than fund-theft, which is reflected in the slightly lower severity.",
+    "seed_source": "etherscan_public",
+    "evidence_url": "https://mevwatch.info/"
+  }
+]
